@@ -4,7 +4,6 @@ import os
 import discord
 import random
 from discord.ext import tasks, commands
-from dotenv import load_dotenv
 from enum import Enum, auto
 from asyncio import sleep
 from datetime import datetime
@@ -15,9 +14,8 @@ class Phase(Enum):
     NIGHT = auto()
 
 
-load_dotenv()
-TOKEN = os.getenv('DISCORD_TOKEN')
-GUILD = os.getenv('DISCORD_GUILD')
+TOKEN = "NzIwMTQxNzk4MTcyOTE3Nzkx.XuU7gA.CivIWybJ0Kftp03RJrAy9mKtDGg"
+GUILD = "Stick Mafia Neo"
 
 ROLE_HOST_ID = 721480223740133417
 
