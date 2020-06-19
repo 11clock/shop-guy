@@ -161,13 +161,13 @@ async def start_lynch():
         player_to_lynch = random.choice(highest_voted_players)
 
     if player_to_lynch is not None:
-        await lynch(player_to_lynch)
+        await kill(player_to_lynch)
         await channel.send(wrap(f"{player_to_lynch.get_display()} was lynched! Give the host a moment to post the reveal!"))
     else:
         await channel.send(wrap(f"There was no one to lynch!"))
 
 
-async def lynch(player: Player):
+async def kill(player: Player):
     guild = get_guild()
     alive_role = guild.get_role(ROLE_ALIVE_ID)
     dead_role = guild.get_role(ROLE_DEAD_ID)
@@ -286,6 +286,17 @@ async def cast_modunvote(ctx, voter: discord.Member):
 @commands.has_role(ROLE_HOST_ID)
 async def force_lynch(ctx):
     await start_lynch()
+
+
+@bot.command(name="kill")
+@commands.has_role(ROLE_HOST_ID)
+async def modkill(ctx, target: discord.Member):
+    target_player = find_player(target)
+    if target_player is not None:
+        await kill(target_player)
+        await ctx.message.add_reaction("✅")
+    else:
+        await ctx.message.add_reaction("❌")
 
 
 @bot.command(name='players')
