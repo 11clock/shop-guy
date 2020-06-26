@@ -136,6 +136,8 @@ async def start_lynch():
 
     channel = get_guild().get_channel(GAME_CHANNEL_ID)
 
+    await display_votes(ctx=channel)
+
     highest_vote_count = 0
 
     for player in players:
