@@ -27,7 +27,7 @@ GAME_ROLE_IDS = [
     ROLE_DEAD_ID
 ]
 
-GAME_CHANNEL_ID = 720134774492233829
+GAME_CHANNEL_ID = 725584064094011432
 
 DAY_END_WARNING_HOUR = 2
 DAY_END_WARNING_MINUTE = 59
@@ -47,15 +47,18 @@ class Player:
     def get_member(self) -> discord.Member:
         return get_guild().get_member(self.member_id)
 
+    def get_vote_member(self):
+        return get_guild().get_member(self.vote_id)
+
     def get_vote_count(self):
         return list(map(lambda p: p.vote_id, players)).count(self.member_id)
 
     def get_display(self):
-        return get_member_display(self.get_member())
+        return self.get_member().display_name
 
     def get_vote_display(self):
         if self.vote_id is not None:
-            return f"{self.get_display()}: {get_member_display(get_guild().get_member(self.vote_id))}"
+            return f"{self.get_display()}: {self.get_vote_member().display_name}"
         else:
             return f"{self.get_display()}:"
 
@@ -92,13 +95,6 @@ def get_game_roles():
 
 def find_player(member: discord.Member):
     return discord.utils.get(players, member_id=member.id)
-
-
-def get_member_display(member: discord.Member):
-    if member.nick is not None:
-        return f'{member.nick} ({member.name})'
-
-    return member.name
 
 
 def wrap(message: str):
@@ -192,7 +188,7 @@ async def on_ready():
 
     print("Guild Members:")
     for member in guild.members:
-        print(f' - {get_member_display(member)}')
+        print(f' - {member.display_name}')
 
     await change_phase(Phase.NIGHT)
 
@@ -248,6 +244,8 @@ async def change_to_night(ctx):
 async def cast_vote(ctx, vote: discord.Member):
     if phase == Phase.NIGHT:
         await ctx.send(wrap("It's night time! Go to sleep!"))
+    elif ctx.channel.id != GAME_CHANNEL_ID:
+        await ctx.send(wrap("You can only vote in #current-game!"))
     else:
         await cast_modvote(ctx, ctx.author, vote)
 
@@ -257,6 +255,8 @@ async def cast_vote(ctx, vote: discord.Member):
 async def cast_unvote(ctx):
     if phase == Phase.NIGHT:
         await ctx.send(wrap("It's night time! Go to sleep!"))
+    elif ctx.channel.id != GAME_CHANNEL_ID:
+        await ctx.send(wrap("You can only unvote in #current-game!"))
     else:
         await cast_modunvote(ctx, ctx.author)
 
@@ -316,7 +316,24 @@ async def display_votes(ctx):
     for player in players:
         message += f"\n - {player.get_vote_display()}"
 
-    await ctx.send(wrap(message))
+    vote_tally = "Vote Tally:"
+
+    players_to_review = players.copy()
+    while len(players_to_review) > 0:
+        highest_vote_count = 0
+
+        for player in players_to_review:
+            highest_vote_count = max(highest_vote_count, player.get_vote_count())
+
+        highest_voted_players = list(filter(lambda p: p.get_vote_count() == highest_vote_count, players))
+        highest_voted_string = ", ".join(list(map(lambda p: p.get_display(), highest_voted_players)))
+
+        vote_tally += f"\n - {highest_vote_count} Votes: {highest_voted_string}"
+
+        for player in highest_voted_players:
+            players_to_review.remove(player)
+
+    await ctx.send(f"{wrap(message)}{wrap(vote_tally)}")
 
 
 bot.run(TOKEN)
