@@ -32,6 +32,8 @@ GAME_CHANNEL_ID = 725584064094011432
 DAY_END_WARNING_HOUR = 2
 DAY_END_WARNING_MINUTE = 59
 
+ALLOW_SELF_VOTE = False
+
 bot = commands.Bot(command_prefix='!')
 
 players = []
@@ -160,9 +162,12 @@ async def start_lynch():
 
     if player_to_lynch is not None:
         await kill(player_to_lynch)
-        await channel.send(wrap(f"{player_to_lynch.get_display()} was lynched! Give the host a moment to post the reveal!"))
+        # await channel.send(wrap(f"{player_to_lynch.get_display()} was lynched! Give the host a moment to post the reveal!"))
+        await channel.send(
+            wrap(f"{player_to_lynch.get_display()} joined the nightclub!"))
     else:
-        await channel.send(wrap(f"There was no one to lynch!"))
+        # await channel.send(wrap(f"There was no one to lynch!"))
+        await channel.send(wrap(f"There was no one to join the nightclub!"))
 
 
 async def kill(player: Player):
@@ -270,6 +275,11 @@ async def cast_modvote(ctx, voter: discord.Member, vote: discord.Member):
     voted_player: Player = find_player(vote)
 
     if voted_player is not None:
+        if not ALLOW_SELF_VOTE:
+            if voted_player.member_id == voter_player.member_id:
+                await ctx.send(wrap("Vote for someone else!"))
+                return
+
         voter_player.vote_id = voted_player.member_id
         await ctx.message.add_reaction("✅")
     else:
