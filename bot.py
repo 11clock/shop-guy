@@ -27,12 +27,14 @@ GAME_ROLE_IDS = [
     ROLE_DEAD_ID
 ]
 
-GAME_CHANNEL_ID = 725584064094011432
+GAME_CHANNEL_ID = 742979693313261569
 
 DAY_END_WARNING_HOUR = 2
 DAY_END_WARNING_MINUTE = 59
 
-ALLOW_SELF_VOTE = False
+ALLOW_SELF_VOTE = True
+ALLOW_NO_LYNCH = True
+NO_LYNCH_AMOUNT = 1
 
 bot = commands.Bot(command_prefix='!')
 
@@ -40,11 +42,14 @@ players = []
 
 phase = Phase.NIGHT
 
+no_lynches_left = NO_LYNCH_AMOUNT
+
 
 class Player:
     def __init__(self, member: discord.Member):
         self.member_id = member.id
         self.vote_id = None
+        self.is_voting_nl = False
 
     def get_member(self) -> discord.Member:
         return get_guild().get_member(self.member_id)
@@ -61,8 +66,18 @@ class Player:
     def get_vote_display(self):
         if self.vote_id is not None:
             return f"{self.get_display()}: {self.get_vote_member().display_name}"
+        elif self.is_voting_nl:
+            return f"{self.get_display()}: No Lynch"
         else:
             return f"{self.get_display()}:"
+
+    def cast_vote(self, vote_id):
+        self.vote_id = vote_id
+        self.is_voting_nl = False
+
+    def cast_nl(self):
+        self.vote_id = None
+        self.is_voting_nl = True
 
 
 class DayEndCog(commands.Cog):
@@ -103,6 +118,10 @@ def wrap(message: str):
     return f"```{message}```"
 
 
+def get_nl_count():
+    return list(map(lambda p: p.is_voting_nl, players)).count(True)
+
+
 async def change_phase(new_phase: Phase):
     global phase
     phase = new_phase
@@ -134,40 +153,47 @@ async def change_phase(new_phase: Phase):
 
 
 async def start_lynch():
+    global no_lynches_left
+
     await change_phase(Phase.NIGHT)
 
     channel = get_guild().get_channel(GAME_CHANNEL_ID)
 
     await display_votes(ctx=channel)
 
+    nl_count = get_nl_count()
+
     highest_vote_count = 0
 
     for player in players:
         highest_vote_count = max(highest_vote_count, player.get_vote_count())
 
-    highest_voted_players = list(filter(lambda p: p.get_vote_count() == highest_vote_count, players))
-
-    highest_voted_string = ", ".join(list(map(lambda p: p.get_display(), highest_voted_players)))
-
-    await channel.send(wrap(f"Verdict: {highest_voted_string}"))
-
-    player_to_lynch = None
-
-    if len(highest_voted_players) == 1:
-        player_to_lynch = highest_voted_players[0]
-    elif len(highest_voted_players) > 1:
-        await channel.send(wrap(f"We have a tie! Give me a minute to find my coin..."))
-        await sleep(60)
-        player_to_lynch = random.choice(highest_voted_players)
-
-    if player_to_lynch is not None:
-        await kill(player_to_lynch)
-        # await channel.send(wrap(f"{player_to_lynch.get_display()} was lynched! Give the host a moment to post the reveal!"))
-        await channel.send(
-            wrap(f"{player_to_lynch.get_display()} joined the nightclub!"))
+    if nl_count > highest_vote_count:
+        no_lynches_left -= 1
+        await channel.send(wrap(f"Verdict: No Lynch\nNo Lynches Left: {no_lynches_left}"))
     else:
-        # await channel.send(wrap(f"There was no one to lynch!"))
-        await channel.send(wrap(f"There was no one to join the nightclub!"))
+        highest_voted_players = list(filter(lambda p: p.get_vote_count() == highest_vote_count, players))
+
+        highest_voted_string = ", ".join(list(map(lambda p: p.get_display(), highest_voted_players)))
+
+        await channel.send(wrap(f"Verdict: {highest_voted_string}"))
+
+        player_to_lynch = None
+
+        if len(highest_voted_players) == 1:
+            player_to_lynch = highest_voted_players[0]
+        elif len(highest_voted_players) > 1:
+            await channel.send(wrap(f"We have a tie! Give me a minute to find my coin..."))
+            await sleep(60)
+            player_to_lynch = random.choice(highest_voted_players)
+
+        if player_to_lynch is not None:
+            await kill(player_to_lynch)
+            await channel.send(
+                wrap(f"{player_to_lynch.get_display()} was lynched! Give the host a moment to post the reveal!"))
+        else:
+            # await channel.send(wrap(f"There was no one to lynch!"))
+            await channel.send(wrap(f"There was no one to lynch!"))
 
 
 async def kill(player: Player):
@@ -181,7 +207,7 @@ async def kill(player: Player):
 
     players.remove(player)
     for player in players:
-        player.vote_id = None
+        player.cast_vote(None)
 
 
 @bot.event
@@ -236,7 +262,9 @@ async def clear_players(ctx):
 @commands.has_role(ROLE_HOST_ID)
 async def change_to_day(ctx):
     await change_phase(Phase.DAY)
-    await ctx.send(wrap("It's day time! Discuss and vote using the vote command!"))
+    await ctx.send(wrap("It's day time! Discuss and vote using the provided commands!"))
+    if no_lynches_left > 0:
+        await ctx.send(wrap(f"No Lynches Left: {no_lynches_left}"))
 
 
 @bot.command(name='night')
@@ -268,6 +296,19 @@ async def cast_unvote(ctx):
         await cast_modunvote(ctx, ctx.author)
 
 
+@bot.command(name='nl')
+@commands.has_role(ROLE_ALIVE_ID)
+async def cast_nl(ctx):
+    if no_lynches_left <= 0:
+        await ctx.send(wrap("You cannot No Lynch!"))
+    elif phase == Phase.NIGHT:
+        await ctx.send(wrap("It's night time! Go to sleep!"))
+    elif ctx.channel.id != GAME_CHANNEL_ID:
+        await ctx.send(wrap("You can only nl in #current-game!"))
+    else:
+        await cast_modnl(ctx, ctx.author)
+
+
 @bot.command(name='modvote')
 @commands.has_role(ROLE_HOST_ID)
 async def cast_modvote(ctx, voter: discord.Member, vote: discord.Member):
@@ -280,7 +321,7 @@ async def cast_modvote(ctx, voter: discord.Member, vote: discord.Member):
                 await ctx.send(wrap("Vote for someone else!"))
                 return
 
-        voter_player.vote_id = voted_player.member_id
+        voter_player.cast_vote(voted_player.member_id)
         await ctx.message.add_reaction("✅")
     else:
         await ctx.send(wrap("That member is not currently in the game!"))
@@ -290,7 +331,15 @@ async def cast_modvote(ctx, voter: discord.Member, vote: discord.Member):
 @commands.has_role(ROLE_HOST_ID)
 async def cast_modunvote(ctx, voter: discord.Member):
     voter_player: Player = find_player(voter)
-    voter_player.vote_id = None
+    voter_player.cast_vote(None)
+    await ctx.message.add_reaction("✅")
+
+
+@bot.command(name='modnl')
+@commands.has_role(ROLE_HOST_ID)
+async def cast_modnl(ctx, voter: discord.Member):
+    voter_player: Player = find_player(voter)
+    voter_player.cast_nl()
     await ctx.message.add_reaction("✅")
 
 
@@ -328,7 +377,7 @@ async def display_votes(ctx):
     for player in players:
         message += f"\n - {player.get_vote_display()}"
 
-    vote_tally = "Vote Tally:"
+    vote_tally = "Player Vote Tally:"
 
     players_to_review = players.copy()
     while len(players_to_review) > 0:
@@ -345,7 +394,11 @@ async def display_votes(ctx):
         for player in highest_voted_players:
             players_to_review.remove(player)
 
-    await ctx.send(f"{wrap(message)}{wrap(vote_tally)}")
+    nl_count = get_nl_count()
 
+    if nl_count > 0:
+        vote_tally += f"\n\n No Lynch Votes: {get_nl_count()}"
+
+    await ctx.send(f"{wrap(message)}{wrap(vote_tally)}")
 
 bot.run(TOKEN)
