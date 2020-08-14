@@ -401,4 +401,5 @@ async def display_votes(ctx):
 
     await ctx.send(f"{wrap(message)}{wrap(vote_tally)}")
 
+print(discord.__version__)
 bot.run(TOKEN)
