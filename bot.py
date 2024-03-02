@@ -14,7 +14,8 @@ class Phase(Enum):
     NIGHT = auto()
 
 
-TOKEN = "NzIwMTQxNzk4MTcyOTE3Nzkx.XuU7gA.CivIWybJ0Kftp03RJrAy9mKtDGg"
+# old token is not usable anymore
+TOKEN = "[REDACTED]"
 GUILD = "Stick Mafia Neo"
 
 ROLE_HOST_ID = 721480223740133417
